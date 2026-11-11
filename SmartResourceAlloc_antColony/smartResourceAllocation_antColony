@@ -1,0 +1,100 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <time.h>
+
+#define TASKS 4       // Number of tasks to allocate
+#define RESOURCES 3   // Number of available resources (e.g., servers)
+#define ANTS 10       // Number of ants per iteration
+#define ITER 50       // Maximum iterations
+#define ALPHA 1.0     // Pheromone importance
+#define BETA 2.0      // Heuristic (low cost) importance
+#define EVAP 0.5      // Pheromone evaporation rate
+
+// Cost matrix: cost[task][resource] (lower is better)
+double cost[TASKS][RESOURCES] = {
+    {10.0, 25.0, 15.0}, // Task 0 costs
+    {20.0, 10.0, 30.0}, // Task 1 costs
+    {30.0, 20.0, 10.0}, // Task 2 costs
+    {12.0, 15.0, 25.0}  // Task 3 costs
+};
+
+double pheromone[TASKS][RESOURCES];
+
+// Helper for random double [0, 1]
+double rnd() {
+    return (double)rand() / RAND_MAX;
+}
+
+// Select a resource for a task using ACO probability rule
+int select_resource(int task) {
+    double probs[RESOURCES], sum = 0.0;
+    for (int r = 0; r < RESOURCES; r++) {
+        double heuristic = 1.0 / cost[task][r]; // Prefer lower cost
+        probs[r] = pow(pheromone[task][r], ALPHA) * pow(heuristic, BETA);
+        sum += probs[r];
+    }
+
+    // Roulette wheel selection
+    double pick = rnd() * sum, cumulative = 0.0;
+    for (int r = 0; r < RESOURCES; r++) {
+        cumulative += probs[r];
+        if (pick <= cumulative) return r;
+    }
+    return RESOURCES - 1;
+}
+
+int main() {
+    srand(time(NULL));
+
+    // 1. Initialize pheromone trails equally
+    for (int t = 0; t < TASKS; t++)
+        for (int r = 0; r < RESOURCES; r++)
+            pheromone[t][r] = 1.0;
+
+    int best_alloc[TASKS];
+    double best_cost = 1e9;
+
+    // 2. Main ACO Loop
+    for (int iter = 0; iter < ITER; iter++) {
+        int ant_alloc[ANTS][TASKS];
+        double ant_cost[ANTS];
+
+        // Each ant builds a complete allocation plan
+        for (int a = 0; a < ANTS; a++) {
+            ant_cost[a] = 0.0;
+            for (int t = 0; t < TASKS; t++) {
+                int r = select_resource(t);
+                ant_alloc[a][t] = r;
+                ant_cost[a] += cost[t][r];
+            }
+            // Track best solution found so far
+            if (ant_cost[a] < best_cost) {
+                best_cost = ant_cost[a];
+                for (int t = 0; t < TASKS; t++) best_alloc[t] = ant_alloc[a][t];
+            }
+        }
+
+        // 3. Pheromone Evaporation
+        for (int t = 0; t < TASKS; t++)
+            for (int r = 0; r < RESOURCES; r++)
+                pheromone[t][r] *= (1.0 - EVAP);
+
+        // 4. Pheromone Deposit (better allocations leave stronger trails)
+        for (int a = 0; a < ANTS; a++) {
+            double deposit = 100.0 / ant_cost[a];
+            for (int t = 0; t < TASKS; t++) {
+                pheromone[t][ant_alloc[a][t]] += deposit;
+            }
+        }
+    }
+
+    // Output optimal allocation
+    printf("Optimal Resource Allocation:\n");
+    for (int t = 0; t < TASKS; t++) {
+        printf("Task %d -> Resource %d (Cost: %.1f)\n", t, best_alloc[t], cost[t][best_alloc[t]]);
+    }
+    printf("Total Minimum Cost: %.1f\n", best_cost);
+
+    return 0;
+}
